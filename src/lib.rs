@@ -21,7 +21,8 @@ pub mod tensor;
 pub use error::ComputeError;
 pub use graph::{Graph, Node};
 pub use ops::{
-    AddOp, DivideOp, LogOp, MatMulOp, MultiplyOp, Op, ReluOp, SoftmaxOp, SubtractOp, SumOp,
+    AddOp, DivideOp, InvertibleOp, LogOp, MatMulOp, MultiplyOp, Op, ReluOp, SoftmaxOp,
+    SubtractOp, SumOp,
 };
 pub use tensor::Tensor;
 
