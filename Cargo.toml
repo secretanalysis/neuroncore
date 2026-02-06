@@ -1,0 +1,16 @@
+[package]
+name = "neuroncore"
+version = "0.1.0"
+edition = "2021"
+description = "NeuronCore: pure-Rust neural computation engine (tensors + autograd graph)"
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "neuroncore"
+path = "src/lib.rs"
+
+[dependencies]
+# Intentionally empty: pure Rust, no external deps.
+
+[dev-dependencies]
+# Intentionally empty.
