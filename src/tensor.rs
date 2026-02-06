@@ -97,6 +97,90 @@ impl Tensor {
         self.elementwise_op(other, |a, b| if b != 0.0 { a / b } else { f32::NAN })
     }
 
+    pub fn matmul(&self, other: &Tensor) -> Result<Tensor, ComputeError> {
+        if self.shape.len() != 2 || other.shape.len() != 2 {
+            return Err(ComputeError::DimensionError {
+                message: "matmul requires 2D tensors".to_string(),
+            });
+        }
+        let m = self.shape[0];
+        let k = self.shape[1];
+        let k_other = other.shape[0];
+        let n = other.shape[1];
+        if k != k_other {
+            return Err(ComputeError::InvalidOperation {
+                message: format!(
+                    "matmul dimension mismatch: left is {m}x{k}, right is {k_other}x{n}"
+                ),
+            });
+        }
+
+        let mut out = vec![0.0; m * n];
+        for i in 0..m {
+            let a_row = i * k;
+            let out_row = i * n;
+            for j in 0..n {
+                let mut sum = 0.0;
+                for p in 0..k {
+                    sum += self.data[a_row + p] * other.data[p * n + j];
+                }
+                out[out_row + j] = sum;
+            }
+        }
+
+        Tensor::new(out, vec![m, n])
+    }
+
+    pub fn transpose_2d(&self) -> Result<Tensor, ComputeError> {
+        if self.shape.len() != 2 {
+            return Err(ComputeError::DimensionError {
+                message: "transpose_2d requires a 2D tensor".to_string(),
+            });
+        }
+        let rows = self.shape[0];
+        let cols = self.shape[1];
+        let mut out = vec![0.0; rows * cols];
+        for r in 0..rows {
+            for c in 0..cols {
+                out[c * rows + r] = self.data[r * cols + c];
+            }
+        }
+        Tensor::new(out, vec![cols, rows])
+    }
+
+    pub fn relu(&self) -> Result<Tensor, ComputeError> {
+        let data: Vec<f32> = self.data.iter().map(|&v| v.max(0.0)).collect();
+        Tensor::new(data, self.shape.clone())
+    }
+
+    pub fn sum(&self, dim: Option<usize>) -> Result<Tensor, ComputeError> {
+        match dim {
+            None => {
+                let total: f32 = self.data.iter().sum();
+                Tensor::new(vec![total], vec![1])
+            }
+            Some(axis) => {
+                if axis >= self.shape.len() {
+                    return Err(ComputeError::DimensionError {
+                        message: format!("invalid axis {axis} for rank {}", self.shape.len()),
+                    });
+                }
+                let mut out_shape = self.shape.clone();
+                out_shape[axis] = 1;
+                let mut out = vec![0.0; out_shape.iter().product()];
+
+                for flat in 0..self.data.len() {
+                    let mut idx = Self::unravel_index_static(flat, &self.shape);
+                    idx[axis] = 0;
+                    let out_flat = Self::ravel_index_static(&idx, &out_shape);
+                    out[out_flat] += self.data[flat];
+                }
+
+                Tensor::new(out, out_shape)
+            }
+        }
+    }
+
     fn elementwise_op<F>(&self, other: &Tensor, op: F) -> Result<Tensor, ComputeError>
     where
         F: Fn(f32, f32) -> f32,
