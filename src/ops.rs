@@ -10,6 +10,52 @@ pub trait Op: Send + Sync {
     ) -> Result<Vec<Tensor>, ComputeError>;
 }
 
+/// Trait for ops whose forward pass can be algebraically inverted.
+///
+/// Given the forward output and all-but-one inputs, recover the missing input.
+/// `known[i]` is `Some` for each known input, `None` at position `solve_for`.
+/// Only implemented for ops where inversion is exact (not ReLU, Softmax, Sum).
+pub trait InvertibleOp: Op {
+    fn invert(
+        &self,
+        output: &Tensor,
+        known: &[Option<&Tensor>],
+        solve_for: usize,
+    ) -> Result<Tensor, ComputeError>;
+}
+
+/// Validate that `known` has exactly one `None` at `solve_for` and the rest are `Some`.
+fn validate_invert_args(
+    known: &[Option<&Tensor>],
+    solve_for: usize,
+    arity: usize,
+) -> Result<(), ComputeError> {
+    if known.len() != arity {
+        return Err(ComputeError::InputCountError {
+            expected: arity,
+            got: known.len(),
+        });
+    }
+    if solve_for >= arity {
+        return Err(ComputeError::IndexError {
+            message: format!("solve_for {solve_for} out of bounds for arity {arity}"),
+        });
+    }
+    if known[solve_for].is_some() {
+        return Err(ComputeError::InvalidOperation {
+            message: "known[solve_for] must be None".to_string(),
+        });
+    }
+    for (i, k) in known.iter().enumerate() {
+        if i != solve_for && k.is_none() {
+            return Err(ComputeError::InvalidOperation {
+                message: format!("known[{i}] must be Some (only solve_for may be None)"),
+            });
+        }
+    }
+    Ok(())
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct AddOp;
 
@@ -30,6 +76,20 @@ impl Op for AddOp {
         grad_output: &Tensor,
     ) -> Result<Vec<Tensor>, ComputeError> {
         Ok(vec![grad_output.clone(), grad_output.clone()])
+    }
+}
+
+/// out = a + b → a = out - b, b = out - a
+impl InvertibleOp for AddOp {
+    fn invert(
+        &self,
+        output: &Tensor,
+        known: &[Option<&Tensor>],
+        solve_for: usize,
+    ) -> Result<Tensor, ComputeError> {
+        validate_invert_args(known, solve_for, 2)?;
+        let other = known[1 - solve_for].unwrap();
+        output.subtract(other)
     }
 }
 
@@ -57,6 +117,23 @@ impl Op for SubtractOp {
             *v = -*v;
         }
         Ok(vec![grad_output.clone(), neg])
+    }
+}
+
+/// out = a - b → a = out + b, b = a - out
+impl InvertibleOp for SubtractOp {
+    fn invert(
+        &self,
+        output: &Tensor,
+        known: &[Option<&Tensor>],
+        solve_for: usize,
+    ) -> Result<Tensor, ComputeError> {
+        validate_invert_args(known, solve_for, 2)?;
+        let other = known[1 - solve_for].unwrap();
+        match solve_for {
+            0 => output.add(other),      // a = out + b
+            _ => other.subtract(output), // b = a - out
+        }
     }
 }
 
@@ -88,6 +165,20 @@ impl Op for MultiplyOp {
         let grad_a = grad_output.multiply(&inputs[1])?;
         let grad_b = grad_output.multiply(&inputs[0])?;
         Ok(vec![grad_a, grad_b])
+    }
+}
+
+/// out = a * b → a = out / b, b = out / a
+impl InvertibleOp for MultiplyOp {
+    fn invert(
+        &self,
+        output: &Tensor,
+        known: &[Option<&Tensor>],
+        solve_for: usize,
+    ) -> Result<Tensor, ComputeError> {
+        validate_invert_args(known, solve_for, 2)?;
+        let other = known[1 - solve_for].unwrap();
+        output.divide(other)
     }
 }
 
@@ -130,6 +221,23 @@ impl Op for DivideOp {
         }
 
         Ok(vec![grad_a, grad_b])
+    }
+}
+
+/// out = a / b → a = out * b, b = a / out
+impl InvertibleOp for DivideOp {
+    fn invert(
+        &self,
+        output: &Tensor,
+        known: &[Option<&Tensor>],
+        solve_for: usize,
+    ) -> Result<Tensor, ComputeError> {
+        validate_invert_args(known, solve_for, 2)?;
+        let other = known[1 - solve_for].unwrap();
+        match solve_for {
+            0 => output.multiply(other), // a = out * b
+            _ => other.divide(output),   // b = a / out
+        }
     }
 }
 
@@ -260,10 +368,10 @@ impl Op for SumOp {
                 // Each slice along axis gets the same scalar grad_output at that reduced index.
                 for flat in 0..grad_input.data().len() {
                     // Recompute indices for input.
-                    let idx = crate::tensor_index::unravel_index(flat, input.shape());
+                    let idx = tensor_index::unravel_index(flat, input.shape());
                     let mut g_idx = idx.clone();
                     g_idx[axis] = 0;
-                    let g_flat = crate::tensor_index::ravel_index(&g_idx, grad_output.shape());
+                    let g_flat = tensor_index::ravel_index(&g_idx, grad_output.shape());
                     grad_input.data_mut()[flat] = grad_output.data()[g_flat];
                 }
             }
@@ -312,6 +420,20 @@ impl Op for LogOp {
             grad.data_mut()[i] = grad_output.data()[i] / x.data()[i];
         }
         Ok(vec![grad])
+    }
+}
+
+/// out = ln(x) → x = exp(out)
+impl InvertibleOp for LogOp {
+    fn invert(
+        &self,
+        output: &Tensor,
+        known: &[Option<&Tensor>],
+        solve_for: usize,
+    ) -> Result<Tensor, ComputeError> {
+        validate_invert_args(known, solve_for, 1)?;
+        let data: Vec<f32> = output.data().iter().map(|&v| v.exp()).collect();
+        Tensor::new(data, output.shape().to_vec())
     }
 }
 
