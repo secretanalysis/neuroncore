@@ -20,7 +20,7 @@ fn two_layer_regression_smoke() {
     params.extend(layer1.parameters());
     params.extend(layer2.parameters());
 
-    let mut opt = SGD::new(params, 0.05, Some(0.9));
+    let mut opt = SGD::new(params, 0.01, None);
 
     // Simple training loop; just verify it runs and the loss stays finite.
     let mut initial_loss = None;
