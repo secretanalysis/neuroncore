@@ -24,7 +24,7 @@ impl XorShift32 {
     /// Uniform float in [0,1).
     pub fn next_f32(&mut self) -> f32 {
         // 24-bit mantissa
-        let v = (self.next_u32() >> 8) as u32;
+        let v = self.next_u32() >> 8;
         (v as f32) / ((1u32 << 24) as f32)
     }
 

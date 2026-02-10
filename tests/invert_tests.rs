@@ -102,8 +102,8 @@ fn div_invert_solve_for_1() {
 
 #[test]
 fn log_invert_round_trip() {
-    let x = Tensor::new(vec![1.0, 2.718281828, 0.5], vec![3]).unwrap();
-    let out = LogOp.forward(&[x.clone()]).unwrap();
+    let x = Tensor::new(vec![1.0, std::f32::consts::E, 0.5], vec![3]).unwrap();
+    let out = LogOp.forward(std::slice::from_ref(&x)).unwrap();
     // out = ln(x), solve x = exp(out)
     let recovered = LogOp.invert(&out, &[None], 0).unwrap();
     assert_close(recovered.data(), x.data(), "log round-trip");
