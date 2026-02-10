@@ -1,5 +1,6 @@
 use crate::error::ComputeError;
 use crate::tensor::Tensor;
+use crate::tensor_index;
 
 pub trait Op: Send + Sync {
     fn forward(&self, inputs: &[Tensor]) -> Result<Tensor, ComputeError>;
@@ -353,7 +354,7 @@ impl Op for SumOp {
         match self.dim {
             None => {
                 // grad_output is [1]
-                let g = grad_output.data().get(0).copied().unwrap_or(0.0);
+                let g = grad_output.data().first().copied().unwrap_or(0.0);
                 for v in grad_input.data_mut().iter_mut() {
                     *v = g;
                 }
@@ -368,10 +369,10 @@ impl Op for SumOp {
                 // Each slice along axis gets the same scalar grad_output at that reduced index.
                 for flat in 0..grad_input.data().len() {
                     // Recompute indices for input.
-                    let idx = tensor_index::unravel_index(flat, input.shape());
+                    let idx = tensor_index::unravel_index(flat, input.shape())?;
                     let mut g_idx = idx.clone();
                     g_idx[axis] = 0;
-                    let g_flat = tensor_index::ravel_index(&g_idx, grad_output.shape());
+                    let g_flat = tensor_index::ravel_index(&g_idx, grad_output.shape())?;
                     grad_input.data_mut()[flat] = grad_output.data()[g_flat];
                 }
             }
@@ -476,7 +477,7 @@ impl Op for SoftmaxOp {
 
         if x.shape().len() == 1 {
             let n = x.shape()[0];
-            if grad_output.shape() != &[n] {
+            if grad_output.shape() != [n] {
                 return Err(ComputeError::InvalidOperation {
                     message: "grad_output shape mismatch".to_string(),
                 });
@@ -486,15 +487,15 @@ impl Op for SoftmaxOp {
                 dot += grad_output.data()[i] * y.data()[i];
             }
             let mut grad = vec![0.0; n];
-            for i in 0..n {
-                grad[i] = y.data()[i] * (grad_output.data()[i] - dot);
+            for (i, g) in grad.iter_mut().enumerate().take(n) {
+                *g = y.data()[i] * (grad_output.data()[i] - dot);
             }
             Ok(vec![Tensor::new(grad, vec![n])?])
         } else {
             // 2D: apply row-wise
             let rows = x.shape()[0];
             let cols = x.shape()[1];
-            if grad_output.shape() != &[rows, cols] {
+            if grad_output.shape() != [rows, cols] {
                 return Err(ComputeError::InvalidOperation {
                     message: "grad_output shape mismatch".to_string(),
                 });
@@ -520,13 +521,13 @@ fn softmax_1d(x: &Tensor) -> Result<Tensor, ComputeError> {
     let max = x.data().iter().cloned().fold(f32::NEG_INFINITY, f32::max);
     let mut exps = vec![0.0; n];
     let mut sum = 0.0;
-    for i in 0..n {
+    for (i, e_out) in exps.iter_mut().enumerate().take(n) {
         let e = (x.data()[i] - max).exp();
-        exps[i] = e;
+        *e_out = e;
         sum += e;
     }
-    for i in 0..n {
-        exps[i] /= sum;
+    for e in exps.iter_mut().take(n) {
+        *e /= sum;
     }
     Tensor::new(exps, vec![n])
 }
@@ -552,34 +553,4 @@ fn softmax_2d(x: &Tensor) -> Result<Tensor, ComputeError> {
         }
     }
     Tensor::new(out, vec![rows, cols])
-}
-
-// Small index helpers used by SumOp backward without exposing Tensor internals.
-pub(crate) mod tensor_index {
-    pub fn compute_strides(shape: &[usize]) -> Vec<usize> {
-        let mut strides = vec![1; shape.len()];
-        for i in (0..shape.len().saturating_sub(1)).rev() {
-            strides[i] = strides[i + 1] * shape[i + 1];
-        }
-        strides
-    }
-
-    pub fn unravel_index(mut flat: usize, shape: &[usize]) -> Vec<usize> {
-        let strides = compute_strides(shape);
-        let mut out = vec![0; shape.len()];
-        for i in 0..shape.len() {
-            out[i] = flat / strides[i];
-            flat %= strides[i];
-        }
-        out
-    }
-
-    pub fn ravel_index(indices: &[usize], shape: &[usize]) -> usize {
-        let strides = compute_strides(shape);
-        indices
-            .iter()
-            .zip(strides.iter())
-            .map(|(&i, &s)| i * s)
-            .sum()
-    }
 }

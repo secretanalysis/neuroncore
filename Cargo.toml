@@ -14,3 +14,9 @@ path = "src/lib.rs"
 
 [dev-dependencies]
 # Intentionally empty.
+
+[features]
+default = []
+mtconnect = []
+opcua = []
+

@@ -11,18 +11,23 @@
 
 pub mod error;
 pub mod graph;
+pub mod health;
+pub mod industrial;
 pub mod layers;
 pub mod losses;
 pub mod ops;
 pub mod optim;
 pub mod prng;
+pub mod run_manifest;
 pub mod tensor;
+pub mod tensor_index;
+pub mod timeseries;
 
 pub use error::ComputeError;
 pub use graph::{Graph, Node};
 pub use ops::{
-    AddOp, DivideOp, InvertibleOp, LogOp, MatMulOp, MultiplyOp, Op, ReluOp, SoftmaxOp,
-    SubtractOp, SumOp,
+    AddOp, DivideOp, InvertibleOp, LogOp, MatMulOp, MultiplyOp, Op, ReluOp, SoftmaxOp, SubtractOp,
+    SumOp,
 };
 pub use tensor::Tensor;
 

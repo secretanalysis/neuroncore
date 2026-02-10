@@ -1,0 +1,6 @@
+<MTConnectStreams>
+  <Timestamp>1700000000</Timestamp>
+  <SpindleSpeed>1500.5</SpindleSpeed>
+  <Feedrate>250.0</Feedrate>
+  <Program>O1234</Program>
+</MTConnectStreams>

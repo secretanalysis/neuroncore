@@ -247,7 +247,7 @@ impl Tensor {
         let offset = out_shape.len().saturating_sub(self.shape.len());
         let mut flat = 0usize;
 
-        for out_dim in 0..out_shape.len() {
+        for (out_dim, out_idx) in out_indices.iter().enumerate().take(out_shape.len()) {
             let t_dim = if out_dim >= offset {
                 self.shape[out_dim - offset]
             } else {
@@ -259,7 +259,7 @@ impl Tensor {
                 0
             };
 
-            let idx = if t_dim == 1 { 0 } else { out_indices[out_dim] };
+            let idx = if t_dim == 1 { 0 } else { *out_idx };
             if idx >= t_dim {
                 return Err(ComputeError::IndexError {
                     message: format!("index {idx} out of bounds for dim {t_dim}"),

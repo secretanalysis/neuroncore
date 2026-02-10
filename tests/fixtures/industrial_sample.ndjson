@@ -1,0 +1,3 @@
+{"type":"machine_state","ts":1,"spindle_rpm":1200.0,"feed_rate":300.0,"program":"P1","alarms":null}
+{"type":"sensor_sample","ts":2,"channels":[0.1,0.2,0.3]}
+{"type":"tool_event","ts":3,"tool_id":"T01","event_type":"change"}

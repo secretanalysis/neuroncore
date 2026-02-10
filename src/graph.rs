@@ -187,3 +187,9 @@ impl Graph {
         self.forward(node_idx)
     }
 }
+
+impl Default for Graph {
+    fn default() -> Self {
+        Self::new()
+    }
+}
